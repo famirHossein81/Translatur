@@ -1,0 +1,10 @@
+build
+bu
+*.exe
+*.obj
+*.dll
+*.manifest
+CMakeLists.txt
+.vscode
+config.json
+json.hpp
