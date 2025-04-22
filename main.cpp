@@ -4,6 +4,7 @@
 #include <wx/event.h>
 #include <wx/clipbrd.h>
 #include <fstream>
+#include <wx/sysopt.h>
 
 class Translator;
 using json = nlohmann::json;
@@ -49,19 +50,20 @@ enum
 wxBEGIN_EVENT_TABLE(MyFrame, wxFrame)
     EVT_HOTKEY(ID_Hotkey, MyFrame::OnHotkey)
         EVT_ACTIVATE(MyFrame::OnActivate)
-            wxEND_EVENT_TABLE()
-
-                bool MyApp::OnInit()
+            wxEND_EVENT_TABLE() bool MyApp::OnInit()
 {
     MyFrame *frame = new MyFrame();
     frame->Hide();
-    frame->RegisterHotKey(ID_Hotkey, wxMOD_CONTROL | wxMOD_SHIFT, 'T');
+    // frame->RegisterHotKey(ID_Hotkey, wxMOD_CONTROL | wxMOD_SHIFT, 'T');
     return true;
 }
 
 MyFrame::MyFrame()
     : wxFrame(nullptr, wxID_ANY, "Translator")
 {
+#ifdef __WXMSW__
+    wxSystemOptions::SetOption("msw.dark-mode", 1);
+#endif
     wxMenuBar *menuBar = new wxMenuBar();
     wxMenu *api = new wxMenu();
     wxMenu *shortcut = new wxMenu();
@@ -106,15 +108,20 @@ void MyFrame::LoadConfig()
     }
     if (j.contains("shortcut"))
     {
-        int modifiers = 0;
         auto shortcut = j["shortcut"];
-        if (shortcut.value("ctrl", false))
+        bool ctrl = shortcut["ctrl"];
+        bool alt = shortcut["alt"];
+        bool shift = shortcut["shift"];
+        std::string keyStr = shortcut["key"];
+
+        int modifiers = 0;
+        if (ctrl)
             modifiers |= wxMOD_CONTROL;
-        if (shortcut.value("alt", false))
+        if (alt)
             modifiers |= wxMOD_ALT;
-        if (shortcut.value("shift", false))
+        if (shift)
             modifiers |= wxMOD_SHIFT;
-        std::string keyStr = shortcut.value("key", "T");
+
         if (!keyStr.empty())
         {
             int keycode = toupper(keyStr[0]);
@@ -165,18 +172,39 @@ void MyFrame::OnActivate(wxActivateEvent &event)
 
 void MyFrame::OnTranslate(wxCommandEvent &event)
 {
-    wxString word = m_inputCtrl->GetValue();
-    if (word.IsEmpty())
+    std::string response;
+    try
     {
-        m_outputCtrl->SetValue("Please enter a word.");
-        return;
+        wxString word = m_inputCtrl->GetValue();
+        if (word.IsEmpty())
+        {
+            m_outputCtrl->SetValue("Please enter a word.");
+            return;
+        }
+        std::string translate_word = word.ToStdString();
+        translate_word.erase(
+            std::remove_if(translate_word.begin(), translate_word.end(),
+                           [](unsigned char c)
+                           { return c < 32 || c > 126; }),
+            translate_word.end());
+        response = m_Translator.Translate(translate_word);
     }
-    std::string translate_word = word.ToStdString();
-    std::string response = m_Translator.Translate(translate_word);
-    json j = json::parse(response);
-    std::string persian_translation = j["persian_definition"].get<std::string>();
-    wxString rtlText = wxString::FromUTF8(persian_translation);
-    m_outputCtrl->SetValue(rtlText);
+    catch (const std::exception &e)
+    {
+        m_outputCtrl->SetValue("Error parsing translation result.");
+    }
+
+    try
+    {
+        json j = json::parse(response);
+        std::string persian_translation = j["persian_definition"].get<std::string>();
+        wxString rtlText = wxString::FromUTF8(persian_translation);
+        m_outputCtrl->SetValue(rtlText);
+    }
+    catch (const std::exception &e)
+    {
+        m_outputCtrl->SetValue("Error parsing translation result.");
+    }
 }
 
 void MyFrame::OnApi(wxCommandEvent &event)
@@ -190,7 +218,8 @@ void MyFrame::OnApi(wxCommandEvent &event)
         m_Translator.setApiKey(apiKey.ToStdString());
         json j;
         std::ifstream in("config.json");
-        if(in) in >> j;
+        if (in)
+            in >> j;
         in.close();
         j["api_key"] = apiKey.ToStdString();
         std::ofstream out("config.json");
@@ -240,6 +269,18 @@ void MyFrame::OnShortcut(wxCommandEvent &event)
             UnregisterHotKey(ID_Hotkey);
             if (RegisterHotKey(ID_Hotkey, modifiers, keycode))
             {
+                std::fstream in("config.json");
+                json j;
+                if (in)
+                    in >> j;
+                in.close();
+                j["shortcut"]["ctrl"] = ctrlBox->GetValue();
+                j["shortcut"]["shift"] = shiftBox->GetValue();
+                j["shortcut"]["alt"] = altBox->GetValue();
+                j["shortcut"]["key"] = keyStr.ToStdString();
+                std::fstream out("config.json");
+                out << j.dump(4);
+                out.close();
                 wxMessageBox("Shortcut changed!", "Shortcut", wxOK | wxICON_INFORMATION, this);
             }
             else

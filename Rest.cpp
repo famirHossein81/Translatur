@@ -51,15 +51,12 @@ std::string Translator::Translate(std::string word)
                    "}\n"
                    "Return only valid JSON.";
 
-        // Build the JSON payload using nlohmann::json
         json payload = {
             {"contents", {{{"parts", {{{"text", prompt}}}}}}}};
 
-        std::string json_data = payload.dump(); // This produces a valid JSON string
+        std::string json_data = payload.dump();
 
-        // ...existing code...
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_data.c_str());
-        // ...existing code...
         struct curl_slist *headers = nullptr;
         headers = curl_slist_append(headers, "Content-Type: application/json");
 
