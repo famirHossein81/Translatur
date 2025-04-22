@@ -12,14 +12,19 @@ class Translator
 public:
     std::string Translate(std::string word);
     void setApiKey(std::string apiKey);
+    std::string getApiKey() const;
 
 private:
-    std::string apiKey;
+    std::string api_key;
 };
 
 void Translator::setApiKey(std::string apiKey)
 {
-    this->apiKey = apiKey;
+    this->api_key = apiKey;
+}
+
+std::string Translator::getApiKey() const{
+    return api_key;
 }
 
 size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp)
@@ -33,7 +38,7 @@ std::string Translator::Translate(std::string word)
     CURL *curl = curl_easy_init();
     if (curl)
     {
-        std::string api_key = this->apiKey;
+        std::string api_key = this->api_key;
         std::string url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + api_key;
         std::string text = word;
         std::string prompt =
