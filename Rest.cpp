@@ -13,17 +13,25 @@ public:
     std::string Translate(std::string word);
     void setApiKey(std::string apiKey);
     std::string getApiKey() const;
+    void setProxy(std::string ip, std::string port);
 
 private:
     std::string api_key;
+    std::string proxy;
 };
+
+void Translator::setProxy(std::string ip, std::string port)
+{
+    proxy = "http://" + ip + ":" + port;
+}
 
 void Translator::setApiKey(std::string apiKey)
 {
     this->api_key = apiKey;
 }
 
-std::string Translator::getApiKey() const{
+std::string Translator::getApiKey() const
+{
     return api_key;
 }
 
@@ -70,7 +78,7 @@ std::string Translator::Translate(std::string word)
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_data.c_str());
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
-        curl_easy_setopt(curl, CURLOPT_PROXY, "http://127.0.0.1:2080");
+        curl_easy_setopt(curl, CURLOPT_PROXY, proxy.c_str());
         std::string response_string;
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_string);

@@ -18,7 +18,8 @@
 
 using json = nlohmann::json;
 
-enum class Theme {
+enum class Theme
+{
     Light,
     Dark
 };
@@ -46,6 +47,7 @@ private:
     void OnShortcut(wxCommandEvent &event);
     void OnThemeSelect(wxCommandEvent &event);
     void ApplyTheme(Theme theme);
+    void OnProxy(wxCommandEvent &event);
     void LoadConfig();
     void SaveConfig();
 
@@ -67,15 +69,16 @@ enum
     ID_Hotkey,
     ID_Append_API,
     ID_Menu_Shortcut,
+    ID_Proxy,
     ID_Theme_Light,
     ID_Theme_Dark
 };
 
 wxBEGIN_EVENT_TABLE(MyFrame, wxFrame)
     EVT_HOTKEY(ID_Hotkey, MyFrame::OnHotkey)
-wxEND_EVENT_TABLE()
+        wxEND_EVENT_TABLE()
 
-bool MyApp::OnInit()
+            bool MyApp::OnInit()
 {
 
     MyFrame *frame = new MyFrame();
@@ -92,6 +95,7 @@ MyFrame::MyFrame()
 
     optionsMenu->Append(ID_Append_API, "API KEY...\tCtrl+Shift+A", "Enter your API KEY");
     optionsMenu->Append(ID_Menu_Shortcut, "Shortcut...\tCtrl+Shift+S", "Change the global shortcut");
+    optionsMenu->Append(ID_Proxy, "Proxy...\tCtrl+Shift+D", "Set Proxy");
     optionsMenu->AppendSeparator();
 
     optionsMenu->AppendRadioItem(ID_Theme_Light, "Light Theme", "Use the light theme");
@@ -126,6 +130,7 @@ MyFrame::MyFrame()
     Bind(wxEVT_MENU, &MyFrame::OnThemeSelect, this, ID_Theme_Light, ID_Theme_Dark);
     Bind(wxEVT_TEXT_ENTER, &MyFrame::OnTranslate, this, m_inputCtrl->GetId());
     Bind(wxEVT_ACTIVATE, &MyFrame::OnActivate, this);
+    Bind(wxEVT_MENU,&MyFrame::OnProxy,this,ID_Proxy);
 
     m_translateBtn->SetDefault();
 
@@ -148,15 +153,15 @@ void MyFrame::LoadConfig()
         {
             in >> m_config;
         }
-        catch (const json::parse_error& e)
+        catch (const json::parse_error &e)
         {
             wxLogError("Failed to parse config.json: %s", e.what());
             m_config = json({});
         }
-        catch (const std::exception& e)
+        catch (const std::exception &e)
         {
-             wxLogError("Failed to read config.json: %s", e.what());
-             m_config = json({});
+            wxLogError("Failed to read config.json: %s", e.what());
+            m_config = json({});
         }
     }
     else
@@ -177,6 +182,10 @@ void MyFrame::LoadConfig()
 
     UnregisterHotKey(ID_Hotkey);
 
+    if (m_config.contains("proxy_ip") && m_config.contains("proxy_port"))
+    {
+        m_Translator.setProxy(m_config["proxy_ip"].get<std::string>(), m_config["proxy_port"].get<std::string>());
+    }
     if (m_config.contains("shortcut") && m_config["shortcut"].is_object())
     {
         try
@@ -188,19 +197,25 @@ void MyFrame::LoadConfig()
             std::string keyStr = shortcut.value("key", "");
 
             int modifiers = 0;
-            if (ctrl) modifiers |= wxMOD_CONTROL;
-            if (alt)  modifiers |= wxMOD_ALT;
-            if (shift)modifiers |= wxMOD_SHIFT;
+            if (ctrl)
+                modifiers |= wxMOD_CONTROL;
+            if (alt)
+                modifiers |= wxMOD_ALT;
+            if (shift)
+                modifiers |= wxMOD_SHIFT;
 
             int keycode = 0;
             if (!keyStr.empty())
             {
                 keycode = static_cast<int>(std::toupper(static_cast<unsigned char>(keyStr[0])));
-                if (!((keycode >= 'A' && keycode <= 'Z') || (keycode >= '0' && keycode <= '9'))) {
-                     wxLogWarning("Invalid shortcut key '%s' specified in config.json. Must be A-Z or 0-9. Hotkey not registered.", keyStr);
-                     keycode = 0;
+                if (!((keycode >= 'A' && keycode <= 'Z') || (keycode >= '0' && keycode <= '9')))
+                {
+                    wxLogWarning("Invalid shortcut key '%s' specified in config.json. Must be A-Z or 0-9. Hotkey not registered.", keyStr);
+                    keycode = 0;
                 }
-            } else {
+            }
+            else
+            {
                 wxLogVerbose("Shortcut key not specified in config.json. Hotkey not registered.");
             }
 
@@ -209,42 +224,53 @@ void MyFrame::LoadConfig()
                 if (!RegisterHotKey(ID_Hotkey, modifiers, keycode))
                 {
                     wxLogError("Failed to register hotkey: Modifier=%d, KeyCode=%d ('%c'). Another application might be using it.", modifiers, keycode, (char)keycode);
-                } else {
-                     wxLogVerbose("Hotkey registered: Modifier=%d, KeyCode=%d ('%c')", modifiers, keycode, (char)keycode);
+                }
+                else
+                {
+                    wxLogVerbose("Hotkey registered: Modifier=%d, KeyCode=%d ('%c')", modifiers, keycode, (char)keycode);
                 }
             }
         }
-        catch (const json::exception& e)
+        catch (const json::exception &e)
         {
             wxLogError("Failed to read shortcut from config.json: %s. Hotkey not registered.", e.what());
         }
-        catch (const std::exception& e)
+        catch (const std::exception &e)
         {
             wxLogError("An error occurred processing shortcut config: %s. Hotkey not registered.", e.what());
         }
-    } else {
-         wxLogVerbose("Shortcut configuration not found or is invalid in config.json. Hotkey not registered.");
+    }
+    else
+    {
+        wxLogVerbose("Shortcut configuration not found or is invalid in config.json. Hotkey not registered.");
     }
 
     if (m_config.contains("theme") && m_config["theme"].is_string())
     {
         std::string themeStr = m_config["theme"].get<std::string>();
-        if (themeStr == "Dark") {
+        if (themeStr == "Dark")
+        {
             m_currentTheme = Theme::Dark;
             wxLogVerbose("Loaded Dark theme from config.");
-        } else {
+        }
+        else
+        {
             m_currentTheme = Theme::Light;
             wxLogVerbose("Loaded Light theme from config (or invalid theme specified).");
         }
-    } else {
+    }
+    else
+    {
         wxLogVerbose("Theme not found in config. Using default Light theme.");
     }
 
     wxMenuBar *menuBar = GetMenuBar();
-    if (menuBar) {
+    if (menuBar)
+    {
         wxMenuItem *lightItem = menuBar->FindItem(ID_Theme_Light);
         wxMenuItem *darkItem = menuBar->FindItem(ID_Theme_Dark);
-        if (lightItem && darkItem) {
+        if (lightItem && darkItem)
+        {
             lightItem->Check(m_currentTheme == Theme::Light);
             darkItem->Check(m_currentTheme == Theme::Dark);
         }
@@ -263,14 +289,14 @@ void MyFrame::SaveConfig()
             out << m_config.dump(4);
             wxLogVerbose("Config saved to config.json");
         }
-        catch (const std::exception& e)
+        catch (const std::exception &e)
         {
             wxLogError("Failed to write config.json: %s", e.what());
         }
     }
     else
     {
-         wxLogError("Failed to open config.json for writing.");
+        wxLogError("Failed to open config.json for writing.");
     }
 }
 
@@ -293,30 +319,34 @@ void MyFrame::ApplyTheme(Theme theme)
         textCtrlTextColor = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT);
     }
 
-    if (m_panel) {
-       m_panel->SetBackgroundColour(bgColor);
+    if (m_panel)
+    {
+        m_panel->SetBackgroundColour(bgColor);
     }
 
-    if (m_inputCtrl) {
+    if (m_inputCtrl)
+    {
         m_inputCtrl->SetBackgroundColour(textCtrlBgColor);
         m_inputCtrl->SetForegroundColour(textCtrlTextColor);
         m_inputCtrl->SetOwnBackgroundColour(textCtrlBgColor);
         m_inputCtrl->SetOwnForegroundColour(textCtrlTextColor);
     }
 
-    if (m_outputCtrl) {
+    if (m_outputCtrl)
+    {
         m_outputCtrl->SetBackgroundColour(textCtrlBgColor);
         m_outputCtrl->SetForegroundColour(textCtrlTextColor);
         m_outputCtrl->SetOwnBackgroundColour(textCtrlBgColor);
         m_outputCtrl->SetOwnForegroundColour(textCtrlTextColor);
     }
 
-    if (m_panel) {
+    if (m_panel)
+    {
         m_panel->Refresh();
         m_panel->Update();
     }
-     Refresh();
-     Update();
+    Refresh();
+    Update();
 
     wxLogVerbose("Applied theme: %s", (theme == Theme::Dark) ? "Dark" : "Light");
 }
@@ -326,11 +356,16 @@ void MyFrame::OnThemeSelect(wxCommandEvent &event)
     (void)event; // Avoid unreferenced parameter warning
 
     Theme selectedTheme;
-    if (event.GetId() == ID_Theme_Light) {
+    if (event.GetId() == ID_Theme_Light)
+    {
         selectedTheme = Theme::Light;
-    } else if (event.GetId() == ID_Theme_Dark) {
+    }
+    else if (event.GetId() == ID_Theme_Dark)
+    {
         selectedTheme = Theme::Dark;
-    } else {
+    }
+    else
+    {
         event.Skip();
         return;
     }
@@ -357,10 +392,14 @@ void MyFrame::ShowAndFocus()
                 m_inputCtrl->SetValue(data.GetText());
                 m_inputCtrl->SetInsertionPointEnd();
                 wxLogVerbose("Pasted text from clipboard.");
-            } else {
-                 wxLogVerbose("Clipboard contained text data object but GetData failed.");
             }
-        } else {
+            else
+            {
+                wxLogVerbose("Clipboard contained text data object but GetData failed.");
+            }
+        }
+        else
+        {
             wxLogVerbose("Clipboard does not contain text data.");
         }
     }
@@ -384,14 +423,14 @@ void MyFrame::OnHotkey(wxKeyEvent &event)
 
 void MyFrame::OnActivate(wxActivateEvent &event)
 {
-     (void)event; // Avoid unreferenced parameter warning
+    (void)event; // Avoid unreferenced parameter warning
 
     if (!event.GetActive())
     {
         wxWindow *focusWin = wxWindow::FindFocus();
         if (!focusWin || !this->IsDescendant(focusWin))
         {
-             Hide();
+            Hide();
         }
     }
     event.Skip();
@@ -421,9 +460,10 @@ void MyFrame::OnTranslate(wxCommandEvent &event)
                        { return c < 32 || c > 126; }),
         translate_word.end());
 
-    if (m_Translator.getApiKey().empty()) {
-         m_outputCtrl->SetValue("API Key is not set. Please go to Options > API KEY...");
-         return;
+    if (m_Translator.getApiKey().empty())
+    {
+        m_outputCtrl->SetValue("API Key is not set. Please go to Options > API KEY...");
+        return;
     }
 
     try
@@ -450,12 +490,12 @@ void MyFrame::OnTranslate(wxCommandEvent &event)
         m_outputCtrl->SetValue(rtlText);
         wxLogVerbose("Displayed translation result.");
     }
-    catch (const json::parse_error& e)
+    catch (const json::parse_error &e)
     {
         m_outputCtrl->SetValue(wxString::Format("Error parsing API response (invalid JSON): %s\nRaw Response: %s", e.what(), response.c_str()));
         wxLogError("JSON parse error: %s", e.what());
     }
-    catch (const json::exception& e)
+    catch (const json::exception &e)
     {
         m_outputCtrl->SetValue(wxString::Format("Error reading data from API response: %s\nRaw Response: %s", e.what(), response.c_str()));
         wxLogError("JSON data access error: %s", e.what());
@@ -531,9 +571,12 @@ void MyFrame::OnShortcut(wxCommandEvent &event)
     if (dlg.ShowModal() == wxID_OK)
     {
         int modifiers = 0;
-        if (ctrlBox->GetValue()) modifiers |= wxMOD_CONTROL;
-        if (altBox->GetValue()) modifiers |= wxMOD_ALT;
-        if (shiftBox->GetValue()) modifiers |= wxMOD_SHIFT;
+        if (ctrlBox->GetValue())
+            modifiers |= wxMOD_CONTROL;
+        if (altBox->GetValue())
+            modifiers |= wxMOD_ALT;
+        if (shiftBox->GetValue())
+            modifiers |= wxMOD_SHIFT;
 
         wxString keyStr = keyCtrl->GetValue().Upper();
         int keycode = 0;
@@ -541,17 +584,17 @@ void MyFrame::OnShortcut(wxCommandEvent &event)
 
         if (keyStr.Length() == 1)
         {
-             char c = keyStr[0];
-             if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))
-             {
-                 keycode = c;
-                 keyStrStd = keyStr.ToStdString();
-             }
-             else
-             {
-                 wxMessageBox("Please enter a single letter (A-Z) or digit (0-9).", "Invalid Input", wxOK | wxICON_WARNING, this);
-                 return;
-             }
+            char c = keyStr[0];
+            if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))
+            {
+                keycode = c;
+                keyStrStd = keyStr.ToStdString();
+            }
+            else
+            {
+                wxMessageBox("Please enter a single letter (A-Z) or digit (0-9).", "Invalid Input", wxOK | wxICON_WARNING, this);
+                return;
+            }
         }
         else
         {
@@ -580,9 +623,44 @@ void MyFrame::OnShortcut(wxCommandEvent &event)
                 wxMessageBox("Failed to register new shortcut.\nAnother application might be using it.", "Error", wxOK | wxICON_ERROR, this);
                 wxLogError("Failed to register new hotkey: Modifier=%d, KeyCode=%d ('%c')", modifiers, keycode, (char)keycode);
             }
-        } else {
+        }
+        else
+        {
             wxMessageBox("Invalid key specified for shortcut.", "Error", wxOK | wxICON_ERROR, this);
             wxLogError("Invalid keycode (0) after shortcut dialog processing.");
         }
+    }
+}
+
+void MyFrame::OnProxy(wxCommandEvent &event)
+{
+    wxDialog dlg(this, wxID_ANY, "Set Proxy", wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER);
+    wxBoxSizer *vbox = new wxBoxSizer(wxVERTICAL);
+
+    wxTextCtrl *ipCtrl = new wxTextCtrl(&dlg, wxID_ANY, m_config.value("proxy_ip", ""), wxDefaultPosition, wxSize(150, -1));
+    wxTextCtrl *portCtrl = new wxTextCtrl(&dlg, wxID_ANY, m_config.value("proxy_port", ""), wxDefaultPosition, wxSize(80, -1));
+    
+    vbox->Add(new wxStaticText(&dlg, wxID_ANY, "Proxy IP:"), 0, wxALL, 5);
+    vbox->Add(ipCtrl, 0, wxALL, 5);
+    vbox->Add(new wxStaticText(&dlg, wxID_ANY, "Proxy Port:"), 0, wxALL, 5);
+    vbox->Add(portCtrl, 0, wxALL, 5);
+
+    wxStdDialogButtonSizer *btnSizer = dlg.CreateStdDialogButtonSizer(wxOK | wxCANCEL);
+    vbox->Add(btnSizer, 0, wxALL | wxALIGN_CENTER, 10);
+
+    dlg.SetSizerAndFit(vbox);
+    dlg.Centre(wxCENTER_ON_SCREEN);
+
+    if (dlg.ShowModal() == wxID_OK)
+    {
+        wxString ip = ipCtrl->GetValue();
+        wxString port = portCtrl->GetValue();
+
+        m_config["proxy_ip"] = ip.ToStdString();
+        m_config["proxy_port"] = port.ToStdString();
+        SaveConfig();
+        m_Translator.setProxy(ip.ToStdString(), port.ToStdString());
+
+        wxMessageBox("Proxy settings saved.", "Proxy", wxOK | wxICON_INFORMATION, this);
     }
 }
